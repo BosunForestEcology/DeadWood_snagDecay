@@ -1,7 +1,7 @@
 # spatialExtent field omitted: removed from SpaDES.core API in version >= 3.0
 defineModule(sim, list(
   name        = "DeadWood_snagDecay",
-  description = "Advances standing dead White Pine trees through DC1-DC5 annually using
+  description = "Advances standing dead White Pine trees through DC1-DC5 every 5 years using
                  a Markov transition matrix, and stochastically transfers fallen snags
                  to sim$fallenSnags for consumption by DeadWood_DWDDecay.",
   keywords    = c("dead wood", "snag", "decay class", "Markov", "White Pine"),
@@ -17,10 +17,21 @@ defineModule(sim, list(
   documentation = list(),
   reqdPkgs    = list("data.table", "SpaDES.core (>= 3.0.0)"),
   parameters  = bindrows(
-    defineParameter("snagTransMat", "matrix", matrix(0, 5, 5), NA, NA,
-                    desc = "5x5 annual DC transition probability matrix for snags."),
-    defineParameter("snagFallProb", "numeric", rep(0.1, 5), 0, 1,
-                    desc = "Annual fall probability by DC (length 5)."),
+    defineParameter("snagTransMat", "matrix",
+                    matrix(c(
+                      0.109, 0.368, 0.471, 0.035, 0.017,  # from DC1
+                      0.000, 0.348, 0.601, 0.051, 0.000,  # from DC2
+                      0.000, 0.000, 0.704, 0.270, 0.027,  # from DC3
+                      0.000, 0.000, 0.000, 0.913, 0.087,  # from DC4
+                      0.000, 0.000, 0.000, 0.000, 1.000   # from DC5
+                    ), nrow = 5, byrow = TRUE,
+                    dimnames = list(paste0("from_DC", 1:5), paste0("to_DC", 1:5))),
+                    NA, NA,
+                    desc = "5x5 5-year conditional DC transition probability matrix for white pine snags, given not fallen. Source: Vanderwel et al. 2006 Table 3."),
+    defineParameter("snagFallProb", "numeric",
+                    c(DC1 = 0.130, DC2 = 0.164, DC3 = 0.212, DC4 = 0.325, DC5 = 0.200),
+                    0, 1,
+                    desc = "5-year fall probability by DC for white pine. Source: Vanderwel et al. 2006 Table 2."),
     defineParameter("species", "character", "Pinus strobus", NA, NA,
                     desc = "Species to filter from cohortData.")
   ),
@@ -41,11 +52,11 @@ doEvent.DeadWood_snagDecay <- function(sim, eventTime, eventType, debug = FALSE)
     eventType,
     init = {
       sim <- Init(sim)
-      sim <- scheduleEvent(sim, start(sim) + 1, "DeadWood_snagDecay", "annual", eventPriority = 1)
+      sim <- scheduleEvent(sim, start(sim) + 5, "DeadWood_snagDecay", "transition", eventPriority = 1)
     },
-    annual = {
-      sim <- Annual(sim)
-      sim <- scheduleEvent(sim, time(sim) + 1, "DeadWood_snagDecay", "annual", eventPriority = 1)
+    transition = {
+      sim <- Transition(sim)
+      sim <- scheduleEvent(sim, time(sim) + 5, "DeadWood_snagDecay", "transition", eventPriority = 1)
     },
     warning(paste("Undefined event type:", eventType, "in module snagDecay"))
   )
@@ -69,9 +80,9 @@ Init <- function(sim) {
   return(invisible(sim))
 }
 
-Annual <- function(sim) {
-  # Absorb new mortality for this year and this species
-  newDead <- sim$cohortData[year == time(sim) & species == P(sim)$species]
+Transition <- function(sim) {
+  # Absorb mortality from the preceding 5-year interval
+  newDead <- sim$cohortData[year > (time(sim) - 5) & year <= time(sim) & species == P(sim)$species]
   if (nrow(newDead) > 0) {
     sim$snagTable <- data.table::rbindlist(list(
       sim$snagTable,
@@ -84,12 +95,12 @@ Annual <- function(sim) {
     return(invisible(sim))
   }
 
-  # Advance decay class via Markov transition
+  # Advance decay class via Markov transition (5-year probabilities)
   oldDC <- sim$snagTable$DC
   sim$snagTable[, DC := applyTransition(DC, P(sim)$snagTransMat)]
-  sim$snagTable[, ageInDC := data.table::fifelse(DC == oldDC, ageInDC + 1L, 0L)]
+  sim$snagTable[, ageInDC := data.table::fifelse(DC == oldDC, ageInDC + 5L, 0L)]
 
-  # Stochastically simulate falls based on post-transition DC
+  # Stochastically simulate falls based on post-transition DC (5-year probabilities)
   fallIdx <- sim$snagTable[, stats::rbinom(.N, 1L, P(sim)$snagFallProb[DC]) == 1L]
   sim$fallenSnags <- sim$snagTable[fallIdx]
   sim$snagTable   <- sim$snagTable[!fallIdx]

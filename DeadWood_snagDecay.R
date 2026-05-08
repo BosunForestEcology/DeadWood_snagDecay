@@ -118,8 +118,8 @@ Transition <- function(sim) {
 
   # Stochastically simulate falls based on pre-transition DC (5-year probabilities)
   fallIdx <- sim$snagTable[, stats::rbinom(.N, 1L, P(sim)$snagFallProb[oldDC]) == 1L]
-  sim$fallenSnags <- sim$snagTable[fallIdx]
-  sim$snagTable   <- sim$snagTable[!fallIdx]
+  sim$fallenSnags <- sim$snagTable[fallIdx,  .(pixelID, species, DC, ageInDC, initBiomass, diameter_cm)]
+  sim$snagTable   <- sim$snagTable[!fallIdx, .(pixelID, species, DC, ageInDC, initBiomass, diameter_cm)]
 
   return(invisible(sim))
 }

@@ -34,8 +34,8 @@ defineModule(sim, list(
                     desc = "5-year fall probability by DC for white pine. Source: Vanderwel et al. 2006 Table 2."),
     defineParameter("species", "character", "Pinus strobus", NA, NA,
                     desc = "Species to filter from cohortData."),
-    defineParameter("defaultDiameter_cm", "numeric", 15.0, 0.1, NA,
-                    desc = "Fallback diameter (cm) assigned to incoming snags when cohortData lacks a diameter_cm column.")
+    defineParameter("defaultDiameter_cm", "numeric", 19.0, 7.5, NA,
+                    desc = "Fallback diameter (cm) assigned to incoming snags when cohortData lacks a diameter_cm column. Minimum 7.5 cm.")
   ),
   inputObjects = bindrows(
     expectsInput("cohortData", "data.table",
@@ -91,6 +91,9 @@ Transition <- function(sim) {
       warning("cohortData lacks diameter_cm — using defaultDiameter_cm (", P(sim)$defaultDiameter_cm, " cm) for all new snags.")
       newDead[, diameter_cm := P(sim)$defaultDiameter_cm]
     }
+    if (any(newDead$diameter_cm < 7.5))
+      stop(sprintf("cohortData contains %d snag(s) with diameter_cm < 7.5 cm. Minimum is 7.5 cm. Smallest: %.4g cm.",
+                   sum(newDead$diameter_cm < 7.5), min(newDead$diameter_cm)))
     sim$snagTable <- data.table::rbindlist(list(
       sim$snagTable,
       newDead[, .(pixelID, species, DC = 1L, ageInDC = 0L, initBiomass = B, diameter_cm)]

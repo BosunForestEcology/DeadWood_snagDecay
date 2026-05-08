@@ -37,7 +37,7 @@ defineModule(sim, list(
   ),
   inputObjects = bindrows(
     expectsInput("cohortData", "data.table",
-                 desc = "Pixel-level cohort table with columns: pixelID, year, species, B (Mg/ha).")
+                 desc = "Pixel-level cohort table with columns: pixelID, year, species, B (Mg/ha), diameter_cm (cm).")
   ),
   outputObjects = bindrows(
     createsOutput("snagTable", "data.table",
@@ -74,7 +74,8 @@ Init <- function(sim) {
     species     = character(),
     DC          = integer(),
     ageInDC     = integer(),
-    initBiomass = numeric()
+    initBiomass = numeric(),
+    diameter_cm = numeric()
   )
   sim$fallenSnags <- data.table::copy(sim$snagTable)
   return(invisible(sim))
@@ -86,7 +87,7 @@ Transition <- function(sim) {
   if (nrow(newDead) > 0) {
     sim$snagTable <- data.table::rbindlist(list(
       sim$snagTable,
-      newDead[, .(pixelID, species, DC = 1L, ageInDC = 0L, initBiomass = B)]
+      newDead[, .(pixelID, species, DC = 1L, ageInDC = 0L, initBiomass = B, diameter_cm)]
     ))
   }
 
@@ -100,8 +101,8 @@ Transition <- function(sim) {
   sim$snagTable[, DC := applyTransition(DC, P(sim)$snagTransMat)]
   sim$snagTable[, ageInDC := data.table::fifelse(DC == oldDC, ageInDC + 5L, 0L)]
 
-  # Stochastically simulate falls based on post-transition DC (5-year probabilities)
-  fallIdx <- sim$snagTable[, stats::rbinom(.N, 1L, P(sim)$snagFallProb[DC]) == 1L]
+  # Stochastically simulate falls based on pre-transition DC (5-year probabilities)
+  fallIdx <- sim$snagTable[, stats::rbinom(.N, 1L, P(sim)$snagFallProb[oldDC]) == 1L]
   sim$fallenSnags <- sim$snagTable[fallIdx]
   sim$snagTable   <- sim$snagTable[!fallIdx]
 

@@ -105,6 +105,12 @@ Transition <- function(sim) {
     return(invisible(sim))
   }
 
+  if (anyNA(sim$snagTable$diameter_cm) || any(sim$snagTable$diameter_cm < 7.5))
+    stop(sprintf(
+      "snagTable contains piece(s) with diameter_cm < 7.5 cm or NA. Smallest: %.4g cm. Check cohortData$diameter_cm for 0 or missing values.",
+      min(sim$snagTable$diameter_cm, na.rm = TRUE)
+    ))
+
   # Advance decay class via Markov transition (5-year probabilities)
   oldDC <- sim$snagTable$DC
   sim$snagTable[, DC := applyTransition(DC, P(sim)$snagTransMat)]

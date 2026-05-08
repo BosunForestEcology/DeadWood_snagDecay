@@ -39,7 +39,7 @@ defineModule(sim, list(
   ),
   inputObjects = bindrows(
     expectsInput("cohortData", "data.table",
-                 desc = "Pixel-level cohort table with columns: pixelID, year, species, B (Mg/ha), diameter_cm (cm).")
+                 desc = "Pixel-level cohort table with columns: pixelID, year, species, biomass (Mg/ha), diameter_cm (cm).")
   ),
   outputObjects = bindrows(
     createsOutput("snagTable", "data.table",
@@ -96,7 +96,7 @@ Transition <- function(sim) {
                    sum(newDead$diameter_cm < 7.5), min(newDead$diameter_cm)))
     sim$snagTable <- data.table::rbindlist(list(
       sim$snagTable,
-      newDead[, .(pixelID, species, DC = 1L, ageInDC = 0L, initBiomass = B, diameter_cm)]
+      newDead[, .(pixelID, species, DC = 1L, ageInDC = 0L, initBiomass = biomass, diameter_cm)]
     ))
   }
 

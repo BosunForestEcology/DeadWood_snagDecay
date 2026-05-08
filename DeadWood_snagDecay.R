@@ -33,7 +33,9 @@ defineModule(sim, list(
                     0, 1,
                     desc = "5-year fall probability by DC for white pine. Source: Vanderwel et al. 2006 Table 2."),
     defineParameter("species", "character", "Pinus strobus", NA, NA,
-                    desc = "Species to filter from cohortData.")
+                    desc = "Species to filter from cohortData."),
+    defineParameter("defaultDiameter_cm", "numeric", 15.0, 0.1, NA,
+                    desc = "Fallback diameter (cm) assigned to incoming snags when cohortData lacks a diameter_cm column.")
   ),
   inputObjects = bindrows(
     expectsInput("cohortData", "data.table",
@@ -85,6 +87,10 @@ Transition <- function(sim) {
   # Absorb mortality from the preceding 5-year interval
   newDead <- sim$cohortData[year > (time(sim) - 5) & year <= time(sim) & species == P(sim)$species]
   if (nrow(newDead) > 0) {
+    if (!"diameter_cm" %in% names(newDead)) {
+      warning("cohortData lacks diameter_cm — using defaultDiameter_cm (", P(sim)$defaultDiameter_cm, " cm) for all new snags.")
+      newDead[, diameter_cm := P(sim)$defaultDiameter_cm]
+    }
     sim$snagTable <- data.table::rbindlist(list(
       sim$snagTable,
       newDead[, .(pixelID, species, DC = 1L, ageInDC = 0L, initBiomass = B, diameter_cm)]

@@ -14,7 +14,7 @@ snagFallProb_test <- c(DC1 = 0.09, DC2 = 0.09, DC3 = 0.10, DC4 = 0.12, DC5 = 0.3
 
 emptyCohorts <- data.table(
   pixelID = integer(), year = integer(),
-  species = character(), B = numeric()
+  species = character(), biomass = numeric()
 )
 
 # testInit is not available in SpaDES.core >= 3.x; use simInit directly.
@@ -39,7 +39,7 @@ testInit <- function(moduleName, params, objects, times = list(start = 0, end = 
 test_that("snagDecay init creates empty snagTable with correct schema", {
   sim <- testInit(
     "DeadWood_snagDecay",
-    params = list(snagDecay = list(
+    params = list(DeadWood_snagDecay = list(
       snagTransMat = snagTransMat_test,
       snagFallProb = snagFallProb_test,
       species      = "Pinus strobus"
@@ -49,13 +49,13 @@ test_that("snagDecay init creates empty snagTable with correct schema", {
   sim <- spades(sim, events = "init")
   expect_s3_class(sim$snagTable, "data.table")
   expect_equal(nrow(sim$snagTable), 0L)
-  expect_named(sim$snagTable, c("pixelID", "species", "DC", "ageInDC", "initBiomass"))
+  expect_named(sim$snagTable, c("pixelID", "species", "DC", "ageInDC", "initBiomass", "diameter_cm"))
 })
 
 test_that("snagDecay init creates empty fallenSnags", {
   sim <- testInit(
     "DeadWood_snagDecay",
-    params = list(snagDecay = list(
+    params = list(DeadWood_snagDecay = list(
       snagTransMat = snagTransMat_test,
       snagFallProb = snagFallProb_test,
       species      = "Pinus strobus"
@@ -65,20 +65,20 @@ test_that("snagDecay init creates empty fallenSnags", {
   sim <- spades(sim, events = "init")
   expect_s3_class(sim$fallenSnags, "data.table")
   expect_equal(nrow(sim$fallenSnags), 0L)
-  expect_named(sim$fallenSnags, c("pixelID", "species", "DC", "ageInDC", "initBiomass"))
+  expect_named(sim$fallenSnags, c("pixelID", "species", "DC", "ageInDC", "initBiomass", "diameter_cm"))
 })
 
-test_that("snagDecay annual absorbs new mortality and populates snagTable", {
+test_that("snagDecay transition absorbs new mortality and populates snagTable", {
   cohorts <- data.table(
     pixelID = c(1L, 2L),
     year    = c(1L, 1L),
     species = "Pinus strobus",
-    B       = c(10.0, 5.0)
+    biomass = c(10.0, 5.0)
   )
   sim <- testInit(
     "DeadWood_snagDecay",
-    times  = list(start = 0, end = 1),
-    params = list(snagDecay = list(
+    times  = list(start = 0, end = 5),
+    params = list(DeadWood_snagDecay = list(
       snagTransMat = snagTransMat_test,
       snagFallProb = snagFallProb_test,
       species      = "Pinus strobus"
@@ -86,21 +86,21 @@ test_that("snagDecay annual absorbs new mortality and populates snagTable", {
     objects = list(cohortData = cohorts)
   )
   set.seed(42)
-  sim <- spades(sim, events = c("init", "annual"))
+  sim <- spades(sim, events = c("init", "transition"))
   expect_true(nrow(sim$snagTable) + nrow(sim$fallenSnags) == 2L)
 })
 
-test_that("snagDecay annual DC never decreases", {
+test_that("snagDecay transition DC never decreases", {
   cohorts <- data.table(
     pixelID = 1:20,
     year    = rep(1L, 20),
     species = "Pinus strobus",
-    B       = rep(5.0, 20)
+    biomass = rep(5.0, 20)
   )
   sim <- testInit(
     "DeadWood_snagDecay",
     times  = list(start = 0, end = 10),
-    params = list(snagDecay = list(
+    params = list(DeadWood_snagDecay = list(
       snagTransMat = snagTransMat_test,
       snagFallProb = rep(0, 5),
       species      = "Pinus strobus"
@@ -112,14 +112,14 @@ test_that("snagDecay annual DC never decreases", {
   expect_true(all(sim$snagTable$DC >= 1L & sim$snagTable$DC <= 5L))
 })
 
-test_that("snagDecay annual with 100% fall probability empties snagTable each year", {
+test_that("snagDecay transition with 100% fall probability empties snagTable each step", {
   cohorts <- data.table(
-    pixelID = 1L, year = 1L, species = "Pinus strobus", B = 5.0
+    pixelID = 1L, year = 1L, species = "Pinus strobus", biomass = 5.0
   )
   sim <- testInit(
     "DeadWood_snagDecay",
-    times  = list(start = 0, end = 1),
-    params = list(snagDecay = list(
+    times  = list(start = 0, end = 5),
+    params = list(DeadWood_snagDecay = list(
       snagTransMat = snagTransMat_test,
       snagFallProb = rep(1, 5),
       species      = "Pinus strobus"
@@ -127,7 +127,7 @@ test_that("snagDecay annual with 100% fall probability empties snagTable each ye
     objects = list(cohortData = cohorts)
   )
   set.seed(5)
-  sim <- spades(sim, events = c("init", "annual"))
+  sim <- spades(sim, events = c("init", "transition"))
   expect_equal(nrow(sim$snagTable), 0L)
   expect_equal(nrow(sim$fallenSnags), 1L)
 })

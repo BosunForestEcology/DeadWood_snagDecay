@@ -5,9 +5,9 @@ defineModule(sim, list(
                every 5 years using species-specific Markov transition matrices, and stochastically
                transfers fallen snags to sim$fallenSnags for consumption by DeadWood_DWDDecay.",
   keywords    = c("dead wood", "snag", "decay class", "Markov", "White Pine", "Red Pine"),
-  authors     = structure(list(list(given = "First", family = "Last",
+  authors     = structure(list(list(given = "Thomson", family = "Harris",
                                     role = c("aut", "cre"),
-                                    email = "email@example.com", comment = NULL)),
+                                    email = "BosunForestEcology@gamil.com", comment = NULL)),
                            class = "person"),
   childModules = character(0),
   version     = list(DeadWood_snagDecay = "0.0.1"),

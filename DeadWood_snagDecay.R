@@ -117,8 +117,15 @@ Init <- function(sim) {
 
 Transition <- function(sim) {
   # Absorb mortality from the preceding 5-year interval for all tracked species
-  newDead <- sim$cohortData[year > (time(sim) - 5) & year <= time(sim) &
-                              species %in% P(sim)$species]
+  allDead  <- sim$cohortData[year > (time(sim) - 5) & year <= time(sim)]
+  droppedSp <- setdiff(unique(allDead$species), P(sim)$species)
+  if (length(droppedSp) > 0L)
+    warning("cohortData contains species not tracked by snagDecay and will be ignored: ",
+            paste(droppedSp, collapse = ", "),
+            ". Only Pinus strobus and Pinus resinosa have fitted parameters by default. ",
+            "To track additional species, you must supply species-specific snagTransMat ",
+            "and snagFallProb entries derived from the literature.")
+  newDead <- allDead[species %in% P(sim)$species]
   if (nrow(newDead) > 0L) {
     if (!"diameter_cm" %in% names(newDead)) {
       warning("cohortData lacks diameter_cm — using defaultDiameter_cm (",

@@ -24,6 +24,11 @@ to `sim$fallenSnags` for ingestion by `DeadWood_DWDDecay`.
 error. This threshold reflects the minimum piece size tracked in
 Vanderwel et al. (2006).
 
+**Untracked species:** Rows in `cohortData` whose `species` value is not
+listed in the `species` parameter are silently dropped each timestep. A
+runtime warning will identify which species were ignored and prompt you
+to add them to the `species` parameter if they should be tracked.
+
 ## Outputs
 
 | Object | Class | Description |

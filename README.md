@@ -168,9 +168,14 @@ $$\text{ageInDC}_\text{new} = \begin{cases} \text{ageInDC} + 5 & \text{if } \tex
 **Step 3 — Stochastic falling**
 
 Using the **pre-transition** DC, each snag independently draws a fall
-outcome:
+outcome.
 
-$$\text{Fall} \sim \text{Bernoulli}\!\left(\text{snagFallProb}[\text{DC}_\text{old}]\right)$$
+$$P(\text{snag falls} \mid DC_{\text{old}} = i) = \text{snagFallProb}[i]$$
+
+where $i$ is the snag’s current decay class (1–5) before the transition
+step, and `snagFallProb[i]` is the species-specific 5-year probability
+of falling for a snag in class $i$. Each snag is evaluated independently
+as a Bernoulli trial — it either falls or it does not.
 
 Snags that fall are moved to `fallenSnags`. Snags that do not fall
 remain in `snagTable` with their updated DC and `ageInDC`.

@@ -59,7 +59,10 @@ defineModule(sim, list(
   ),
   inputObjects = bindrows(
     expectsInput("cohortData", "data.table",
-                 desc = "Pixel-level cohort table with columns: pixelID, year, species, biomass (Mg/ha), diameter_cm (cm).")
+                 desc = "Pixel-level mortality events. Columns: pixelID (integer), year (numeric — year of death),
+                     species (character), biomass (numeric, Mg/ha), diameter_cm (numeric, cm).
+                     Typically produced by DeadWood_Mortality; can also be supplied directly or
+                     replaced by any module that outputs cohortData (e.g. LandR Biomass).")
   ),
   outputObjects = bindrows(
     createsOutput("snagTable", "data.table",

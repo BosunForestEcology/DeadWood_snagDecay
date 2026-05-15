@@ -1,6 +1,5 @@
 DeadWood_snagDecay
 ================
-2026-05-14
 
 ## Overview
 
@@ -18,7 +17,8 @@ to `sim$fallenSnags` for ingestion by `DeadWood_DWDDecay`.
 
 | Object | Class | Description |
 |----|----|----|
-| `cohortData` | `data.table` | Pixel-level tree mortality table. Required columns: `pixelID` (integer), `year` (numeric — year of death), `species` (character), `biomass` (numeric, Mg ha⁻¹ at death). Optional column: `diameter_cm` (numeric, cm; see `defaultDiameter_cm` parameter if absent). |
+| `cohortData` | `data.table` | Pixel-level tree mortality events. Required columns: `pixelID` (integer), `year` (numeric — year of death), `species` (character), `biomass` (numeric, Mg ha⁻¹ at death). Optional column: `diameter_cm` (numeric, cm; see `defaultDiameter_cm` parameter if absent). Typically produced by `DeadWood_Mortality`; can be supplied directly or replaced by any module that outputs `cohortData` (e.g. LandR Biomass). |
+| `initialSnagTable` | `data.table` | *Optional.* Pre-existing snag inventory loaded into `snagTable` at simulation start. Required columns: `pixelID` (integer), `species` (character), `DC` (integer, 1–5), `ageInDC` (integer, years already spent in current DC), `initBiomass` (numeric, Mg ha⁻¹), `diameter_cm` (numeric, cm ≥ 7.5). Can be supplied directly by the user via `setupProject()` (standalone/survey use), or written by any upstream module (disturbance history, initialisation). If absent, `snagTable` starts empty. |
 
 **Minimum diameter:** Any snag with `diameter_cm < 7.5 cm` will cause an
 error. This threshold reflects the minimum piece size tracked in
@@ -49,12 +49,12 @@ Both tables share the same schema:
 
 ## Parameters
 
-| Parameter            | Type        | Default source                 |
-|----------------------|-------------|--------------------------------|
-| `snagTransMat`       | `list`      | Vanderwel et al. 2006, Table 3 |
-| `snagFallProb`       | `list`      | Vanderwel et al. 2006, Table 2 |
-| `species`            | `character` | —                              |
-| `defaultDiameter_cm` | `numeric`   | —                              |
+| Parameter | Type | Default | Range | Description |
+|----|----|----|----|----|
+| `snagTransMat` | matrix | See below | — | 5×5 Markov transition probability matrix for decay class advancement (5-year intervals). Source: Vanderwel et al. (2006) Table 3. |
+| `snagFallProb` | numeric | See below | \[0, 1\] | Length-5 vector of 5-year fall probabilities, one per decay class. Source: Vanderwel et al. (2006) Table 2. |
+| `species` | character | `c("Pinus strobus", "Pinus resinosa")` | — | Character vector of species to process from `cohortData`. Each entry must have a named entry in both `snagTransMat` and `snagFallProb`. |
+| `defaultDiameter_cm` | numeric | `19.0` | ≥ 7.5 | Fallback diameter (cm) assigned to all incoming snags when `cohortData` lacks a `diameter_cm` column. |
 
 ### `snagTransMat`
 
@@ -187,15 +187,20 @@ remain in `snagTable` with their updated DC and `ageInDC`.
 
 ## Event scheduling and module interactions
 
-This module is designed to run alongside `DeadWood_DWDDecay` and
-`DeadWood_Biomass`. Event priorities within each 5-year timestep are:
+This module is designed to run alongside `DeadWood_Mortality`,
+`DeadWood_DWDDecay`, and `DeadWood_Biomass`. `DeadWood_Mortality` fires
+every year (priority 0); the remaining modules fire every 5 years.
+Priority determines order only among events scheduled at the same
+simulation time.
 
-| Priority | Module | Event | Purpose |
-|----|----|----|----|
-| 1 | `DeadWood_snagDecay` | `transition` | Advance DC, produce `fallenSnags` |
-| 2 | `DeadWood_DWDDecay` | `receive` | Accept `fallenSnags` into DWD pool |
-| 3 | `DeadWood_DWDDecay` | `transition` | Advance DWD DC |
-| 4 | `DeadWood_Biomass` | `transition` | Compute biomass rasters |
+| Timestep | Priority | Module | Event | Purpose |
+|----|----|----|----|----|
+| every 1 yr | 0 | `DeadWood_Mortality` | `transition` | Apply baseline mortality, append to `cohortData` |
+| every 5 yr | 1 | `DeadWood_snagDecay` | `transition` | Absorb `cohortData` (5-yr window), advance snag DC ← **this module** |
+| every 5 yr | 2 | `DeadWood_DWDDecay` | `receive` | Accept `fallenSnags` into DWD pool |
+| every 5 yr | 3 | `DeadWood_DWDDecay` | `transition` | Advance DWD DC |
+| every 5 yr | 4 | `DeadWood_Biomass` | `transition` | Compute biomass rasters |
+| every 5 yr | 5 | `DeadWood_Biomass` | `plot` | Capture biomass snapshots |
 
 This ordering guarantees that `fallenSnags` is populated before
 `DeadWood_DWDDecay` reads it, and that biomass is computed from the

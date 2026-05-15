@@ -59,7 +59,17 @@ defineModule(sim, list(
   ),
   inputObjects = bindrows(
     expectsInput("cohortData", "data.table",
-                 desc = "Pixel-level cohort table with columns: pixelID, year, species, biomass (Mg/ha), diameter_cm (cm).")
+                 desc = "Pixel-level mortality events. Columns: pixelID (integer), year (numeric — year of death),
+                     species (character), biomass (numeric, Mg/ha), diameter_cm (numeric, cm).
+                     Typically produced by DeadWood_Mortality; can also be supplied directly or
+                     replaced by any module that outputs cohortData (e.g. LandR Biomass)."),
+    expectsInput("initialSnagTable", "data.table",
+                 desc = "Optional pre-existing snag inventory loaded into snagTable at simulation start.
+                     Columns: pixelID (integer), species (character), DC (integer 1-5),
+                     ageInDC (integer), initBiomass (numeric, Mg/ha), diameter_cm (numeric, cm >= 7.5).
+                     Can be supplied directly by the user via setupProject() or written by any upstream
+                     module (e.g. a disturbance history or initialisation module). If NULL or absent,
+                     snagTable starts empty.")
   ),
   outputObjects = bindrows(
     createsOutput("snagTable", "data.table",
@@ -112,6 +122,23 @@ Init <- function(sim) {
     diameter_cm = numeric()
   )
   sim$fallenSnags <- data.table::copy(sim$snagTable)
+
+  if (!is.null(sim$initialSnagTable) && nrow(sim$initialSnagTable) > 0L) {
+    required_cols <- c("pixelID", "species", "DC", "ageInDC", "initBiomass", "diameter_cm")
+    missing_cols  <- setdiff(required_cols, names(sim$initialSnagTable))
+    if (length(missing_cols) > 0L)
+      stop("initialSnagTable is missing required columns: ", paste(missing_cols, collapse = ", "))
+    if (any(!sim$initialSnagTable$DC %in% 1:5))
+      stop("initialSnagTable$DC must be integers 1-5.")
+    if (any(sim$initialSnagTable$diameter_cm < 7.5, na.rm = TRUE))
+      stop("initialSnagTable contains diameter_cm < 7.5 cm.")
+    sim$snagTable <- data.table::rbindlist(list(
+      sim$snagTable,
+      sim$initialSnagTable[, .(pixelID, species, DC = as.integer(DC),
+                               ageInDC = as.integer(ageInDC), initBiomass, diameter_cm)]
+    ))
+  }
+
   return(invisible(sim))
 }
 

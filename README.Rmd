@@ -28,6 +28,7 @@ are transferred to `sim$fallenSnags` for ingestion by `DeadWood_DWDDecay`.
 | Object | Class | Description |
 |--------|-------|-------------|
 | `cohortData` | `data.table` | Pixel-level tree mortality events. Required columns: `pixelID` (integer), `year` (numeric — year of death), `species` (character), `biomass` (numeric, Mg ha⁻¹ at death). Optional column: `diameter_cm` (numeric, cm; see `defaultDiameter_cm` parameter if absent). Typically produced by `DeadWood_Mortality`; can be supplied directly or replaced by any module that outputs `cohortData` (e.g. LandR Biomass). |
+| `initialSnagTable` | `data.table` | *Optional.* Pre-existing snag inventory loaded into `snagTable` at simulation start. Required columns: `pixelID` (integer), `species` (character), `DC` (integer, 1–5), `ageInDC` (integer, years already spent in current DC), `initBiomass` (numeric, Mg ha⁻¹), `diameter_cm` (numeric, cm ≥ 7.5). Can be supplied directly by the user via `setupProject()` (standalone/survey use), or written by any upstream module (disturbance history, initialisation). If absent, `snagTable` starts empty. |
 
 **Minimum diameter:** Any snag with `diameter_cm < 7.5 cm` will cause an error.
 This threshold reflects the minimum piece size tracked in Vanderwel et al. (2006).

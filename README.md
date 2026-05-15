@@ -1,39 +1,18 @@
 DeadWood_snagDecay
 ================
-2026-05-11
+2026-05-14
 
-- [DeadWood_snagDecay](#deadwood_snagdecay)
-  - [Inputs](#inputs)
-  - [Outputs](#outputs)
-  - [Parameters](#parameters)
-    - [Default transition matrix
-      (`snagTransMat`)](#default-transition-matrix-snagtransmat)
-    - [Default fall probabilities
-      (`snagFallProb`)](#default-fall-probabilities-snagfallprob)
-  - [Events](#events)
-    - [`init` (once, at simulation
-      start)](#init-once-at-simulation-start)
-    - [`transition` (every 5 years, priority
-      1)](#transition-every-5-years-priority-1)
-  - [Event scheduling and module
-    interactions](#event-scheduling-and-module-interactions)
-  - [Usage example](#usage-example)
-  - [References](#references)
-  - [Package dependencies](#package-dependencies)
+## Overview
 
-# DeadWood_snagDecay
-
-A [SpaDES](https://spades.predictiveecology.org/) module that advances
-standing dead trees (snags) through five decay classes (DC1–DC5) using a
-stochastic Markov chain model. At each 5-year timestep, snags may
-progress to a more advanced decay class and are subject to stochastic
-falling. Fallen snags are passed to the `DeadWood_DWDDecay` module as
-downed woody debris (DWD).
-
-Default parameters are calibrated for *Pinus strobus* (Eastern White
-Pine) using Vanderwel et al. (2006).
-
-------------------------------------------------------------------------
+`DeadWood_snagDecay` advances standing dead trees (snags) through five
+decay classes (DC1–DC5) every 5 years using two independent stochastic
+processes. First, each snag draws from a species-specific Markov
+transition matrix to determine which decay class it moves to. Second,
+each snag independently draws from a Bernoulli trial using a species-
+and DC-specific fall probability to determine whether it falls that
+timestep. The two processes are independent: a snag can advance decay
+classes and fall in the same timestep. Snags that fall are transferred
+to `sim$fallenSnags` for ingestion by `DeadWood_DWDDecay`.
 
 ## Inputs
 
@@ -45,14 +24,17 @@ Pine) using Vanderwel et al. (2006).
 error. This threshold reflects the minimum piece size tracked in
 Vanderwel et al. (2006).
 
-------------------------------------------------------------------------
+**Untracked species:** Rows in `cohortData` whose `species` value is not
+listed in the `species` parameter are silently dropped each timestep. A
+runtime warning will identify which species were ignored and prompt you
+to add them to the `species` parameter if they should be tracked.
 
 ## Outputs
 
 | Object | Class | Description |
 |----|----|----|
 | `snagTable` | `data.table` | Current standing snag inventory, updated every 5 years. |
-| `fallenSnags` | `data.table` | Snags that fell during the current timestep, consumed by `DeadWood_DWDDecay`. Reset each timestep. |
+| `fallenSnags` | `data.table` | Snags that fell during the current timestep, passed to `DeadWood_DWDDecay`. Reset each timestep. |
 
 Both tables share the same schema:
 
@@ -65,45 +47,85 @@ Both tables share the same schema:
 | `initBiomass` | numeric | Biomass at time of death (Mg ha⁻¹); never modified after entry |
 | `diameter_cm` | numeric | Piece diameter (cm); never modified after entry |
 
-------------------------------------------------------------------------
-
 ## Parameters
 
-| Parameter | Type | Default | Range | Description |
-|----|----|----|----|----|
-| `snagTransMat` | matrix | See below | — | 5×5 Markov transition probability matrix for decay class advancement (5-year intervals). Source: Vanderwel et al. (2006) Table 3. |
-| `snagFallProb` | numeric | See below | \[0, 1\] | Length-5 vector of 5-year fall probabilities, one per decay class. Source: Vanderwel et al. (2006) Table 2. |
-| `species` | character | `"Pinus strobus"` | — | Species name used to filter rows from `cohortData`. |
-| `defaultDiameter_cm` | numeric | `19.0` | ≥ 7.5 | Fallback diameter (cm) assigned to all incoming snags when `cohortData` lacks a `diameter_cm` column. |
+| Parameter            | Type        | Default source                 |
+|----------------------|-------------|--------------------------------|
+| `snagTransMat`       | `list`      | Vanderwel et al. 2006, Table 3 |
+| `snagFallProb`       | `list`      | Vanderwel et al. 2006, Table 2 |
+| `species`            | `character` | —                              |
+| `defaultDiameter_cm` | `numeric`   | —                              |
 
-### Default transition matrix (`snagTransMat`)
+### `snagTransMat`
 
-Rows are current DC; columns are DC entered at the next 5-year step
-(conditional on the snag not having fallen):
+A named list of 5×5 Markov transition matrices, one per species. Each
+matrix gives the 5-year conditional probability of moving from one decay
+class (row) to another (column). DC5 is absorbing — snags that reach DC5
+remain there until they fall. Row names are `from_DC1`–`from_DC5`;
+column names are `to_DC1`–`to_DC5`. Names in the list must match the
+`species` parameter.
 
-``` r
-matrix(c(
-  0.109, 0.368, 0.471, 0.035, 0.017,  # from DC1
-  0.000, 0.348, 0.601, 0.051, 0.000,  # from DC2
-  0.000, 0.000, 0.704, 0.270, 0.027,  # from DC3
-  0.000, 0.000, 0.000, 0.913, 0.087,  # from DC4
-  0.000, 0.000, 0.000, 0.000, 1.000   # from DC5
-), nrow = 5, byrow = TRUE,
-dimnames = list(paste0("from_DC", 1:5), paste0("to_DC", 1:5)))
-```
+Transitions are strictly forward (lower triangle is zero); a snag cannot
+revert to an earlier decay class.
 
-Row sums equal 1.0. DC5 is an absorbing state (snags do not decay beyond
-DC5; they can only fall).
+Default matrices (Vanderwel et al. 2006, Table 3):
 
-### Default fall probabilities (`snagFallProb`)
+***Pinus strobus***
 
-5-year probability of a snag falling, by decay class:
+|              |   DC1 |   DC2 |   DC3 |   DC4 |   DC5 |
+|--------------|------:|------:|------:|------:|------:|
+| **from DC1** | 0.109 | 0.368 | 0.471 | 0.035 | 0.017 |
+| **from DC2** | 0.000 | 0.348 | 0.601 | 0.051 | 0.000 |
+| **from DC3** | 0.000 | 0.000 | 0.704 | 0.270 | 0.027 |
+| **from DC4** | 0.000 | 0.000 | 0.000 | 0.913 | 0.087 |
+| **from DC5** | 0.000 | 0.000 | 0.000 | 0.000 | 1.000 |
 
-| DC1   | DC2   | DC3   | DC4   | DC5   |
-|-------|-------|-------|-------|-------|
-| 0.130 | 0.164 | 0.212 | 0.325 | 0.200 |
+***Pinus resinosa***
 
-------------------------------------------------------------------------
+|              |   DC1 |   DC2 |   DC3 |   DC4 |   DC5 |
+|--------------|------:|------:|------:|------:|------:|
+| **from DC1** | 0.109 | 0.368 | 0.471 | 0.035 | 0.017 |
+| **from DC2** | 0.000 | 0.234 | 0.434 | 0.252 | 0.081 |
+| **from DC3** | 0.000 | 0.000 | 0.704 | 0.270 | 0.027 |
+| **from DC4** | 0.000 | 0.000 | 0.000 | 0.913 | 0.087 |
+| **from DC5** | 0.000 | 0.000 | 0.000 | 0.000 | 1.000 |
+
+The two species share identical DC1, DC3, DC4, and DC5 rows; they differ
+at DC2, where *P. resinosa* transitions more rapidly to DC4–DC5.
+
+### `snagFallProb`
+
+A named list of 5-year fall probability vectors, one per species. Each
+vector has length 5, with one probability per decay class. At each
+5-year timestep each snag is independently sampled using its current
+DC’s fall probability; snags that fall are removed from `snagTable` and
+added to `fallenSnags`.
+
+Default values (Vanderwel et al. 2006, Table 2):
+
+| Species          |   DC1 |   DC2 |   DC3 |   DC4 |   DC5 |
+|------------------|------:|------:|------:|------:|------:|
+| *Pinus strobus*  | 0.130 | 0.164 | 0.212 | 0.325 | 0.200 |
+| *Pinus resinosa* | 0.000 | 0.039 | 0.094 | 0.224 | 0.080 |
+
+*P. resinosa* DC1 has a fall probability of zero — freshly dead red pine
+snags do not fall immediately. Fall probability generally increases with
+decay class, peaking at DC4 for both species.
+
+### `species`
+
+Character vector of species names to process from `cohortData`. Default:
+`c("Pinus strobus", "Pinus resinosa")`. Each entry must have a
+corresponding named entry in both `snagTransMat` and `snagFallProb`; the
+module will stop with an informative error if a name is missing.
+
+### `defaultDiameter_cm`
+
+Fallback piece diameter (cm) applied to all incoming snags when
+`cohortData` does not include a `diameter_cm` column. Default: `19.0`
+cm. Minimum allowed value is `7.5` cm (the minimum coarse woody debris
+threshold). Diameter is passed to `DeadWood_DWDDecay` and controls the
+logistic transition rate once a piece falls.
 
 ## Events
 
@@ -111,8 +133,10 @@ The module fires two event types on a 5-year schedule.
 
 ### `init` (once, at simulation start)
 
-- Validates that `snagTransMat` is non-zero and `snagFallProb` has
-  length 5.
+- Validates that each species in `species` has a named entry in
+  `snagTransMat` and `snagFallProb`, that each transition matrix is 5×5
+  with no all-zero rows, and each fall probability vector has length 5
+  with values in \[0, 1\].
 - Creates empty `snagTable` and `fallenSnags` with the correct schema.
 - Schedules the first `transition` event at `start(sim) + 5` with
   priority 1.
@@ -131,9 +155,15 @@ with `ageInDC = 0`.
 **Step 2 — Advance decay class**
 
 Each snag’s decay class is updated by drawing from the row of
-`snagTransMat` corresponding to its current DC:
+`snagTransMat` corresponding to its current DC.
 
-$$\text{DC}_\text{new} \sim \text{Categorical}\!\left(\text{snagTransMat}[\text{DC}_\text{old},\, \cdot\,]\right)$$
+$$P(DC_{\text{new}} = j \mid DC_{\text{old}} = i) = \text{snagTransMat}[i,\; j]$$
+
+where $i$ is the snag’s current decay class (1–5) and $j$ is the decay
+class being transitioned into (1–5). The equation gives the probability
+of moving from class $i$ to class $j$ in a single 5-year timestep, read
+directly from row $i$, column $j$ of the transition matrix. One value of
+$j$ is drawn for each snag.
 
 Because transition probabilities only move forward (upper-triangular
 matrix), DC never decreases. Time in decay class is tracked:
@@ -143,14 +173,17 @@ $$\text{ageInDC}_\text{new} = \begin{cases} \text{ageInDC} + 5 & \text{if } \tex
 **Step 3 — Stochastic falling**
 
 Using the **pre-transition** DC, each snag independently draws a fall
-outcome:
+outcome.
 
-$$\text{Fall} \sim \text{Bernoulli}\!\left(\text{snagFallProb}[\text{DC}_\text{old}]\right)$$
+$$P(\text{snag falls} \mid DC_{\text{old}} = i) = \text{snagFallProb}[i]$$
+
+where $i$ is the snag’s current decay class (1–5) before the transition
+step, and `snagFallProb[i]` is the species-specific 5-year probability
+of falling for a snag in class $i$. Each snag is evaluated independently
+as a Bernoulli trial — it either falls or it does not.
 
 Snags that fall are moved to `fallenSnags`. Snags that do not fall
 remain in `snagTable` with their updated DC and `ageInDC`.
-
-------------------------------------------------------------------------
 
 ## Event scheduling and module interactions
 
@@ -168,35 +201,46 @@ This ordering guarantees that `fallenSnags` is populated before
 `DeadWood_DWDDecay` reads it, and that biomass is computed from the
 fully updated inventories.
 
-------------------------------------------------------------------------
-
-## Usage example
+## Example
 
 ``` r
-library(SpaDES.core)
+library(SpaDES.project)
+set.seed(42)
 
-# Minimal cohort table
+# Three mortality pulses at different years fill the full DC spectrum by year 50:
+#   Year  1 cohort: 50 years of decay → concentrated in DC4-5
+#   Year 15 cohort: 35 years          → mixed DC2-4
+#   Year 30 cohort: 20 years          → mostly DC1-2
 cohortData <- data.table::data.table(
-  pixelID    = c(1L, 1L, 2L),
-  year       = c(5,  5,  10),
-  species    = "Pinus strobus",
-  biomass    = c(12.5, 8.3, 6.0),   # Mg ha-1
-  diameter_cm = c(22.0, 18.5, 15.0)
+  pixelID     = 1:60,
+  year        = c(rep(1L, 20), rep(15L, 20), rep(30L, 20)),
+  species     = rep(c(rep("Pinus strobus", 10), rep("Pinus resinosa", 10)), 3),
+  biomass     = c(rep(25.0, 20), rep(20.0, 20), rep(15.0, 20)),
+  diameter_cm = c(rep(32.0, 20), rep(26.0, 20), rep(20.0, 20))
 )
 
-mySim <- simInit(
-  times   = list(start = 0, end = 50),
-  params  = list(DeadWood_snagDecay = list(species = "Pinus strobus")),
-  modules = list("DeadWood_snagDecay"),
-  objects = list(cohortData = cohortData)
+out <- SpaDES.project::setupProject(
+  paths      = list(modulePath = "modules"),
+  modules    = "BosunForestEcology/DeadWood_snagDecay@main",
+  times      = list(start = 0, end = 50),
+  cohortData = cohortData
 )
 
-mySim <- spades(mySim)
-mySim$snagTable
-mySim$fallenSnags
+mySim <- SpaDES.core::simInitAndSpades2(out)
+
+library(ggplot2)
+
+dcSummary <- mySim$snagTable[, .(biomass = sum(initBiomass)), by = .(DC, species)][order(species, DC)]
+
+ggplot(dcSummary, aes(x = DC, y = biomass, colour = species)) +
+  geom_line(linewidth = 1) +
+  geom_point(size = 3) +
+  scale_x_continuous(breaks = 1:5) +
+  scale_colour_manual(values = c("Pinus strobus" = "darkgreen", "Pinus resinosa" = "saddlebrown")) +
+  labs(x = "Decay class", y = "Total snag biomass (Mg/ha)",
+       title = "Snag biomass by decay class at year 50", colour = NULL) +
+  theme_bw()
 ```
-
-------------------------------------------------------------------------
 
 ## References
 
@@ -204,8 +248,6 @@ Vanderwel, M.C., Malcolm, J.R., Smith, S.M., and Islam, N. (2006). An
 integrated model for snag and downed woody debris decay class
 transition. *Forest Ecology and Management*, 234(1–3), 48–59.
 <https://doi.org/10.1016/j.foreco.2006.06.020>
-
-------------------------------------------------------------------------
 
 ## Package dependencies
 

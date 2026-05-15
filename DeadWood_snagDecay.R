@@ -5,9 +5,9 @@ defineModule(sim, list(
                every 5 years using species-specific Markov transition matrices, and stochastically
                transfers fallen snags to sim$fallenSnags for consumption by DeadWood_DWDDecay.",
   keywords    = c("dead wood", "snag", "decay class", "Markov", "White Pine", "Red Pine"),
-  authors     = structure(list(list(given = "First", family = "Last",
+  authors     = structure(list(list(given = "Thomson", family = "Harris",
                                     role = c("aut", "cre"),
-                                    email = "email@example.com", comment = NULL)),
+                                    email = "BosunForestEcology@gamil.com", comment = NULL)),
                            class = "person"),
   childModules = character(0),
   version     = list(DeadWood_snagDecay = "0.0.1"),
@@ -120,8 +120,15 @@ Init <- function(sim) {
 
 Transition <- function(sim) {
   # Absorb mortality from the preceding 5-year interval for all tracked species
-  newDead <- sim$cohortData[year > (time(sim) - 5) & year <= time(sim) &
-                              species %in% P(sim)$species]
+  allDead  <- sim$cohortData[year > (time(sim) - 5) & year <= time(sim)]
+  droppedSp <- setdiff(unique(allDead$species), P(sim)$species)
+  if (length(droppedSp) > 0L)
+    warning("cohortData contains species not tracked by snagDecay and will be ignored: ",
+            paste(droppedSp, collapse = ", "),
+            ". Only Pinus strobus and Pinus resinosa have fitted parameters by default. ",
+            "To track additional species, you must supply species-specific snagTransMat ",
+            "and snagFallProb entries derived from the literature.")
+  newDead <- allDead[species %in% P(sim)$species]
   if (nrow(newDead) > 0L) {
     if (!"diameter_cm" %in% names(newDead)) {
       warning("cohortData lacks diameter_cm — using defaultDiameter_cm (",
